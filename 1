@@ -1,0 +1,131 @@
+import cv2
+import mss
+import numpy as np
+import pytesseract
+import re
+from tkinter import *
+import tkinter as tk
+pytesseract.pytesseract.tesseract_cmd = 'C:\\Program Files\\Tesseract-OCR\\tesseract.exe'
+root = tk.Tk()
+root.geometry("700x200")
+selector_ply_1 = [[(636, 901), (827, 938), 'text', 'player_name'],[(640, 940), (822, 983), 'text', 'stack'],[(610, 710), (657, 744),'box', 'position'],[(682, 684), (805, 717), 'text', 'bet_size'],[(595, 370), (873, 405), 'text', 'total pot'],[(679, 862), (787, 898), 'do', 'doing']]
+player_position = ['BTN', 'SB', 'BB', 'UTG', 'UTG1', 'MP', 'MP1', 'CO']
+mon = {"top": 0, "left": 226, "width": 1468, "height": 1040}
+playerName1 = None
+doing = None
+playerName1 = None
+stack = None
+bet_size = None
+total_pot = None
+dialer = None
+pixel_dialer = 1598
+sct = mss.mss()
+def see():
+    global total_pot, stack, bet_size, doing, dialer, playerName1
+    imgShow = np.asarray(sct.grab(mon))
+    data_of_ply1 = []
+    duing_date = []
+    imgMask = np.zeros_like(imgShow)
+    for x, r in enumerate(selector_ply_1):
+        cv2.rectangle(imgMask, (r[0][0], r[0][1]), (r[1][0], r[1][1]), (0, 255, 0), cv2.FILLED)
+        imgShow = cv2.addWeighted(imgShow, 0.99, imgMask, 0.1, 0)
+        imgCrop = imgShow[r[0][1]:r[1][1], r[0][0]:r[1][0]]
+        if r[2] == 'text':
+            imgCrop = cv2.cvtColor(imgCrop, cv2.COLOR_BGR2GRAY)
+            data_of_ply1.append(pytesseract.image_to_string(imgCrop))
+        if r[2] == 'box':
+            imgGray = cv2.cvtColor(imgCrop, cv2.COLOR_BGR2GRAY)
+            imgThresh = cv2.threshold(imgGray,170,255, cv2.THRESH_BINARY_INV)[1]
+            Thresh_Dialer = cv2.countNonZero(imgThresh)
+            if Thresh_Dialer < pixel_dialer : dialer = 'Dialer'
+            else: dialer = None
+        if r[2] == 'do':
+            imgGray = cv2.cvtColor(imgCrop, cv2.COLOR_BGR2LAB)
+            duing_date.append(pytesseract.image_to_string(imgGray))
+    # Total Pot 
+    a = data_of_ply1[3]
+    b = str(a)
+    c = b.replace(',','')
+    nums = re.findall('\d+', c)
+    nums = [int(i) for i in nums]
+    if len(nums) != 0:
+        total_pot = nums[0]
+    # Bet Size
+    a = data_of_ply1[2]
+    b = str(a)
+    nums = b.replace(',','')
+    nums = re.findall('\d+', nums)
+    if len(nums) != 0:
+        a = nums[0]
+        bet_size = int(a)
+    else:
+        bet_size = None
+    # Вывод надписи All-in или  Stack
+    allin = re.findall('All-In', data_of_ply1[1])
+    a = data_of_ply1[1]
+    b = str(a)
+    c = b.replace(',','')
+    nums = re.findall('\d+', c)
+    if bool(nums) == True:
+        a = nums[0]
+        stack = int(a)
+    elif bool(allin) == True:
+        stack = allin[0]
+    else:
+        stack = None
+    # Вывод Player Name-1
+    if len(data_of_ply1[0]) == 0:
+        playerName1 = None
+    if len(data_of_ply1[0]) != 0:
+        a = data_of_ply1[0]
+        b = str(a)
+        c = b.replace('_', '').replace('|', '').replace('—', '').replace('©', '').replace('.', '').replace('~', '')
+        playerName1 = str(c.strip())
+        # regex = r"[a-zA-Z0-9]+"
+        # playerName1 = re.findall(regex, playerName1)
+        # playerName1 = playerName1[0]
+     # Вывод Doing
+    Fold = re.findall('Fold', duing_date[0])
+    Call = re.findall('Call', duing_date[0])
+    All_in = re.findall('All-In', duing_date[0])
+    Bet = re.findall('Bet', duing_date[0])
+    Check = re.findall('Check', duing_date[0])
+    Raise = re.findall('Raise', duing_date[0])
+    if True == bool(Fold):
+        doing = Fold[0]
+    elif True == bool(Call):
+        doing = Call[0]
+    elif True == bool(All_in):
+        doing = All_in[0]
+    elif True == bool(Bet):
+        doing = Bet[0]
+    elif True == bool(Check):
+        doing = Check[0]
+    elif True == bool(Raise):
+        doing = Raise[0]
+    else:
+        doing = None
+    update_values()
+    root.after(100, see) # вызываем функцию с задержкой
+def update_values():
+    labels[0].config(text=f"Player Name-1 : {playerName1}")
+    labels[1].config(text=f"Stack : {stack}")
+    labels[2].config(text=f"Position : {dialer}")
+    labels[3].config(text=f"Bet Size : {bet_size}")
+    labels[4].config(text=f"Total Pot : {total_pot}")
+    labels[5].config(text=f"Doing : {doing}")
+labels = []
+labels.append(tk.Label(root, text=f"Player Name-1 : {playerName1}" ))
+labels[0].pack(anchor=NW, padx=0, pady=0)
+labels.append(tk.Label(root, text=f"\rStack : {stack}",anchor='w',padx=0, width=100,borderwidth=0, highlightthickness=0))
+labels[1].pack(anchor=NW, padx=0, pady=0)
+labels.append(tk.Label(root, text=f"Position : {dialer}",anchor='w',padx=0, width=100))
+labels[2].pack(anchor=NW, padx=0, pady=0)
+labels.append(tk.Label(root, text=f"Bet Size : {bet_size}",anchor='w',padx=0, width=100))
+labels[3].pack(anchor=NW, padx=0, pady=0)
+labels.append(tk.Label(root, text=f"Total Pot : {total_pot}",anchor='w',padx=0, width=100))
+labels[4].pack(anchor=NW, padx=0, pady=0)
+labels.append(tk.Label(root, text=f"Doing : {doing}",anchor='w',padx=0, width=100))
+labels[5].pack(anchor=NW, padx=0, pady=0)
+see()
+root.mainloop()
